@@ -1,5 +1,6 @@
 import type { LiteLLMModelInfo, LiteLLMModelInfoEntry } from '../../types'
 import type { ModelInfoEnricher, ModelInfoEnricherOptions } from './types'
+import { lookupModelsDevData, type ModelsDevModel } from '../models-dev-fetcher'
 
 function hasUsableNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -70,24 +71,45 @@ function createReasoningVariants(info: LiteLLMModelInfo): Record<string, any> | 
   return Object.keys(variants).length > 0 ? variants : undefined
 }
 
-function applyLiteLLMModelInfo(modelConfig: any, entry: LiteLLMModelInfoEntry | undefined): void {
+function applyLiteLLMModelInfo(
+  modelConfig: any, 
+  entry: LiteLLMModelInfoEntry | undefined,
+  modelsDevCache?: Map<string, ModelsDevModel>
+): void {
   const info = entry?.model_info
   if (!info) return
 
   const DEFAULT_CONTEXT = 200000
   const DEFAULT_OUTPUT = 32000
 
-  const contextLimit = hasUsableNumber(info.max_input_tokens) 
+  let contextLimit = hasUsableNumber(info.max_input_tokens) 
     ? info.max_input_tokens 
     : hasUsableNumber(info.max_tokens)
       ? info.max_tokens
-      : DEFAULT_CONTEXT
+      : undefined
 
-  const outputLimit = hasUsableNumber(info.max_output_tokens) 
+  let outputLimit = hasUsableNumber(info.max_output_tokens) 
     ? info.max_output_tokens 
     : hasUsableNumber(info.max_tokens)
       ? info.max_tokens
-      : DEFAULT_OUTPUT
+      : undefined
+
+  // Fallback to models.dev
+  if ((!hasUsableNumber(contextLimit) || !hasUsableNumber(outputLimit)) && modelsDevCache) {
+    const modelsDevData = lookupModelsDevData(modelConfig.id, modelsDevCache)
+    if (modelsDevData?.limit) {
+      if (!hasUsableNumber(contextLimit)) {
+        contextLimit = modelsDevData.limit.context || modelsDevData.limit.input
+      }
+      if (!hasUsableNumber(outputLimit)) {
+        outputLimit = modelsDevData.limit.output
+      }
+    }
+  }
+
+  // Final fallback to default
+  contextLimit = hasUsableNumber(contextLimit) ? contextLimit : DEFAULT_CONTEXT
+  outputLimit = hasUsableNumber(outputLimit) ? outputLimit : DEFAULT_OUTPUT
 
   modelConfig.limit = {
     context: contextLimit,
@@ -123,7 +145,11 @@ export function createLiteLLMModelInfoEnricher(
       return typeof mode === 'string' && mode.length > 0 && mode !== 'chat'
     },
     applyModelInfo(modelConfig: any, modelId: string): void {
-      applyLiteLLMModelInfo(modelConfig, getModelInfo(modelInfoById, modelId))
+      applyLiteLLMModelInfo(
+        modelConfig, 
+        getModelInfo(modelInfoById, modelId),
+        options.modelsDevCache
+      )
     },
   }
 }

@@ -6,6 +6,7 @@ import { categorizeModel, formatModelName, extractModelOwner } from '../utils'
 import { normalizeBaseURL, discoverModelsFromProvider, discoverModelInfoFromProvider, autoDetectOpenAICompatibleProvider, canDiscoverModels } from '../utils/openai-compatible-api'
 import { createModelInfoEnricher, isSupportedModelInfoFormat, type ModelInfoEnricher } from '../utils/model-info'
 import { getProviderFilter, getDiscoveryConfig, getModelRegexFilter, getProviderModelRegexFilter, shouldDiscoverModel, shouldDiscoverProviderWithOverride } from '../types/plugin-config'
+import { fetchModelsDevData } from '../utils/models-dev-fetcher'
 import type { PluginLogger } from './logger'
 import type { PluginInput } from '@opencode-ai/plugin'
 import type { OpenAIModel } from '../types'
@@ -172,6 +173,11 @@ export async function enhanceConfig(
   logger: PluginLogger
 ): Promise<void> {
   try {
+    const modelsDevCache = await fetchModelsDevData()
+    logger.info('Loaded models.dev data', {
+      count: modelsDevCache.size
+    })
+
     const providers = config.provider || {}
     const openAICompatibleProviders: DiscoveredProvider[] = []
     const providerFilter = getProviderFilter(pluginConfig)
@@ -235,7 +241,7 @@ export async function enhanceConfig(
       } else if (typeof modelInfoEndpoint === 'string' && modelInfoEndpoint.length > 0 && modelInfoFormat) {
         const modelInfoDiscovery = await discoverModelInfoFromProvider(baseURL, apiKey, modelInfoEndpoint)
         if (modelInfoDiscovery.ok) {
-          modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, modelInfoDiscovery.data, { filterNonChat })
+          modelInfoEnricher = createModelInfoEnricher(modelInfoFormat, modelInfoDiscovery.data, { filterNonChat, modelsDevCache })
         } else {
           logger.warn('Provider model info discovery failed', {
             provider: providerName,
