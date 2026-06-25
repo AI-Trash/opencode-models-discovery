@@ -6,17 +6,17 @@ Some OpenAI-compatible HTTP gateways can respond successfully to `curl` and Node
 
 Node's global `fetch()` is implemented by undici. It is the preferred high-level request API for now, but it can behave differently from Node's lower-level `http` and `https` modules against non-standard or minimal HTTP servers.
 
-## Current Patch Strategy
+## Current Strategy
 
-The current patch keeps `fetch()` as the primary request path and only falls back to Node's `http` / `https` modules when `fetch()` throws, such as on timeout or network-level failures.
+OpenAI-compatible model discovery now uses Node's low-level `http` / `https` modules directly instead of Node's global `fetch()`.
 
-Fallback should not run when `fetch()` receives a valid HTTP response. These cases must preserve the existing behavior:
+These cases preserve the previous observable behavior:
 
 - non-2xx HTTP responses
 - successful responses with an empty model list
 - successful responses with invalid or empty JSON bodies
 
-The fallback helper should preserve the same observable behavior as the fetch path as much as possible:
+The low-level request helper should preserve consistent behavior across discovery requests:
 
 - use the same timeout value
 - pass the same headers, including `Authorization`
@@ -25,13 +25,18 @@ The fallback helper should preserve the same observable behavior as the fetch pa
 - destroy the request on timeout
 - settle the Promise only once
 
-## Follow-Up Refactor
+## Refactor Status
 
-This fallback is intentionally a patch-level compatibility fix, not the final HTTP client design.
+The original fallback was a patch-level compatibility fix. The follow-up refactor has been completed for OpenAI-compatible discovery requests by replacing the `fetch()` primary path and fallback branch with a single low-level request helper.
 
-Later, we plan to refactor model discovery requests to use a single low-level Node `http` / `https` request helper instead of `fetch()`. That refactor should be done separately because it changes the core request implementation and requires broader validation.
+This applies to:
 
-The future helper should cover at least:
+- `/v1/models` discovery
+- custom model discovery endpoints
+- `/v1/model/info` discovery
+- direct model list fetching
+
+The helper covers:
 
 - `http:` and `https:` URLs
 - status code validation
@@ -40,4 +45,4 @@ The future helper should cover at least:
 - response stream errors
 - shared headers and auth handling
 - consistent return semantics for model discovery and model info discovery
-- tests for success, non-2xx, invalid JSON, timeout, and transport errors
+- tests for success, empty model lists, non-2xx responses, invalid JSON, timeout, transport errors, auth headers, and custom endpoints
