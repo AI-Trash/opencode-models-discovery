@@ -3,7 +3,49 @@ import { promises as fs } from 'node:fs'
 import { ModelDiscoveryPlugin } from '../src/index.ts'
 import { modelsDevTestUtils } from '../src/utils/models-dev-fetcher.ts'
 
-const mockFetch = vi.fn()
+const mockFetch = vi.hoisted(() => vi.fn())
+
+vi.mock('../src/utils/openai-compatible-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/utils/openai-compatible-api')>()
+  const requestOptions = (apiKey?: string) => ({
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+    },
+    signal: AbortSignal.timeout(3000)
+  })
+
+  const readJson = async <T,>(response: any): Promise<T | undefined> => {
+    if (!response?.ok) return undefined
+    try {
+      return await response.json() as T
+    } catch {
+      return undefined
+    }
+  }
+
+  return {
+    ...actual,
+    discoverModelsFromProvider: vi.fn(async (baseURL: string, apiKey?: string, endpoint = '/v1/models') => {
+      try {
+        const data = await readJson<{ data?: any[] }>(await mockFetch(actual.buildAPIURL(baseURL, endpoint), requestOptions(apiKey)))
+        return data ? { ok: true, models: data.data ?? [] } : { ok: false, models: [] }
+      } catch {
+        return { ok: false, models: [] }
+      }
+    }),
+    discoverModelInfoFromProvider: vi.fn(async (baseURL: string, apiKey?: string, endpoint = '/v1/model/info') => {
+      try {
+        const data = await readJson<unknown>(await mockFetch(actual.buildAPIURL(baseURL, endpoint), requestOptions(apiKey)))
+        return data !== undefined ? { ok: true, data } : { ok: false, data: undefined }
+      } catch {
+        return { ok: false, data: undefined }
+      }
+    })
+  }
+})
+
 global.fetch = mockFetch
 
 if (!global.AbortSignal.timeout) {

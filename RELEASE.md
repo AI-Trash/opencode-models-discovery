@@ -1,121 +1,146 @@
 # Release Process
 
-This project uses an automated release system that handles versioning, testing, git tagging, GitHub releases, and npm publishing.
+This project uses a two-step automated release system. The Release workflow prepares a release PR from `dev`, and the Publish workflow publishes after that PR is merged to `main`.
 
 ## Quick Start
 
-```bash
-npm run release patch   # 0.1.0 -> 0.1.1 (bug fixes)
-npm run release minor   # 0.1.0 -> 0.2.0 (new features)
-npm run release major   # 0.1.0 -> 1.0.0 (breaking changes)
-npm run release 0.2.0   # Set specific version
+1. Merge ready feature PRs into `dev`.
+2. Run the GitHub Actions `Release` workflow.
+3. Keep `source_branch` as `dev` unless intentionally releasing from another branch.
+4. Choose `patch`, `minor`, or `major`.
+5. Review and merge the generated `release/vX.Y.Z -> main` PR.
+6. The `Publish` workflow runs automatically after the release PR changes `package.json` on `main`.
+7. After publishing, sync `main` back into `dev` so the version bump is carried forward.
+
+## Branch Flow
+
+```text
+feature branches -> dev -> release/vX.Y.Z -> main -> publish
 ```
 
-## What the Release Script Does
+Release branches are short-lived per-version branches. There is no long-lived `release` branch.
 
-1. **Bumps version** in `package.json`
-2. **Runs build and tests** to ensure everything works
-3. **Creates git tag** (e.g., `v0.1.1`)
-4. **Pushes to GitHub** (commits and tags)
-5. **Creates GitHub release** with auto-generated release notes
-6. **Publishes to npm** (if authentication is configured)
+## What the Workflows Do
+
+### Release Workflow
+
+The Release workflow (`.github/workflows/release.yml`) is manually triggered. It checks out `dev` by default and runs:
+
+```bash
+bun scripts/release.ts prepare <patch|minor|major>
+```
+
+It will:
+
+1. Create `release/vX.Y.Z` from the selected source branch.
+2. Bump `package.json` to `X.Y.Z`.
+3. Run `npm run build`.
+4. Commit the version bump.
+5. Push the release branch.
+6. Open a PR from `release/vX.Y.Z` to `main`.
+
+### Publish Workflow
+
+The Publish workflow (`.github/workflows/publish.yml`) runs on manual dispatch or when `package.json` changes on `main`. It runs:
+
+```bash
+bun scripts/release.ts publish
+```
+
+It will:
+
+1. Run `npm run build`.
+2. Create and push the `vX.Y.Z` git tag if it does not already exist.
+3. Create a GitHub release with generated release notes.
+4. Publish `opencode-models-discovery@X.Y.Z` to npm if that version does not already exist.
 
 ## Prerequisites
 
 ### Local Releases
 
-1. **npm authentication** (one of these):
-   - `npm login` (with 2FA OTP)
-   - `npm token create --read-only=false` then `npm config set //registry.npmjs.org/:_authToken YOUR_TOKEN`
-   - Set `NPM_TOKEN` environment variable
+Local release preparation can still use the same script, but prefer the GitHub Actions workflow for normal releases.
 
-2. **GitHub CLI** (`gh`) authenticated:
+1. **GitHub CLI** (`gh`) authenticated:
    - `gh auth login`
+
+2. From the intended source branch, run:
+
+```bash
+bun scripts/release.ts prepare patch
+```
 
 ### CI/CD Releases (GitHub Actions)
 
-1. Add `NPM_TOKEN` secret to your GitHub repository:
-   - Go to: Settings → Secrets and variables → Actions
-   - Add secret: `NPM_TOKEN` = (your npm token)
-
-2. Run the workflow:
-   - Go to: Actions → Release → Run workflow
+1. Configure npm trusted publishing for this repository.
+2. Ensure the Publish workflow has `id-token: write` permission.
+3. Run the workflow:
+   - Go to: Actions -> Release -> Run workflow
    - Select version type (patch/minor/major)
+   - Keep source branch as `dev`
    - Click "Run workflow"
 
 ## Version Types
 
-- **patch**: Bug fixes, small improvements (0.1.0 → 0.1.1)
-- **minor**: New features, backwards compatible (0.1.0 → 0.2.0)
-- **major**: Breaking changes (0.1.0 → 1.0.0)
+- **patch**: Bug fixes, small improvements (0.1.0 -> 0.1.1)
+- **minor**: New features, backwards compatible (0.1.0 -> 0.2.0)
+- **major**: Breaking changes (0.1.0 -> 1.0.0)
 
 ## Manual Steps (if needed)
 
-If the automated script fails at any step, you can complete it manually:
+If automation fails, complete the same two phases manually.
+
+### Prepare Release PR
 
 ```bash
-# 1. Bump version
-npm version patch  # or minor, major
+git switch dev
+bun scripts/release.ts prepare patch
+```
 
-# 2. Run tests
-npm run build
+### Publish After Merge
 
-# 3. Create and push tag
-git tag v0.1.1
-git push origin v0.1.1
-
-# 4. Create GitHub release
-gh release create v0.1.1 --title "v0.1.1" --notes "Release notes"
-
-# 5. Publish to npm
-npm publish
+```bash
+git switch main
+git pull origin main
+bun scripts/release.ts publish
 ```
 
 ## Troubleshooting
 
-### npm publish fails with 2FA error
+### npm publish fails
 
-**Solution**: Create an npm token and configure it:
-```bash
-npm token create --read-only=false
-npm config set //registry.npmjs.org/:_authToken YOUR_TOKEN
-```
+Common causes:
 
-Or use environment variable:
-```bash
-export NPM_TOKEN=your_token_here
-npm run release patch
-```
+- Trusted Publishing is not configured for this repository.
+- The Publish workflow is missing `id-token: write`.
+- The package version already exists on npm.
+- The publish step was run outside GitHub Actions without npm credentials.
 
 ### GitHub release creation fails
 
-**Solution**: Ensure GitHub CLI is authenticated:
+Ensure `GH_TOKEN` is available in GitHub Actions, or authenticate GitHub CLI locally:
+
 ```bash
 gh auth login
 ```
 
 ### Version already exists
 
-**Solution**: The script will detect this and skip npm publish. Just bump to the next version:
-```bash
-npm run release patch  # Will create 0.1.2 if 0.1.1 exists
-```
+The publish script detects existing npm versions and skips `npm publish`. Bump to a new version if you need another release.
+
+### dev has an old version after publishing
+
+Merge `main` back into `dev` after the release PR is merged and published.
 
 ## CI/CD Integration
 
-The GitHub Actions workflow (`.github/workflows/release.yml`) allows you to create releases from the GitHub UI:
+The normal CI/CD release path is:
 
-1. Go to Actions tab
-2. Select "Release" workflow
-3. Click "Run workflow"
-4. Choose version type
-5. Click "Run workflow" button
+1. Go to Actions tab.
+2. Select `Release` workflow.
+3. Click `Run workflow`.
+4. Choose version type.
+5. Keep source branch as `dev`.
+6. Merge the generated release PR into `main`.
+7. Let the `Publish` workflow publish automatically.
 
-The workflow will:
-- Run all tests
-- Create git tag
-- Create GitHub release
-- Publish to npm
-
-All automatically! 🚀
-
+Do not run release preparation from `main` during normal development releases.
