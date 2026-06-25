@@ -4,8 +4,6 @@ import type { OpenAIModel, OpenAIModelsResponse } from '../types'
 
 const OPENAI_COMPATIBLE_MODELS_ENDPOINT = "/v1/models"
 const REQUEST_TIMEOUT_MS = 3000
-// Patch-level compatibility fallback. See docs/issues/issue-19-fetch-fallback.md
-// before broadening this into the planned low-level HTTP helper refactor.
 
 export interface ModelsDiscoveryResult {
   ok: boolean
@@ -30,25 +28,7 @@ export function buildAPIURL(baseURL: string, endpoint: string = OPENAI_COMPATIBL
   return `${normalized}${endpoint}`
 }
 
-async function fetchJson<T>(url: string, headers: Record<string, string>): Promise<T | undefined> {
-  const response = await fetch(url, {
-    method: "GET",
-    headers,
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  })
-
-  if (!response.ok) {
-    return undefined
-  }
-
-  try {
-    return await response.json() as T
-  } catch {
-    return undefined
-  }
-}
-
-function fetchJsonViaHttpModule<T>(urlStr: string, headers: Record<string, string>): Promise<T | undefined> {
+function requestJson<T>(urlStr: string, headers: Record<string, string>): Promise<T | undefined> {
   return new Promise((resolve) => {
     let settled = false
     const finish = (data: T | undefined) => {
@@ -101,13 +81,8 @@ export async function discoverModelsFromProvider(
     headers["Authorization"] = `Bearer ${apiKey}`
   }
 
-  try {
-    const data = await fetchJson<OpenAIModelsResponse>(url, headers)
-    return data ? { ok: true, models: data.data ?? [] } : { ok: false, models: [] }
-  } catch {
-    const data = await fetchJsonViaHttpModule<OpenAIModelsResponse>(url, headers)
-    return data ? { ok: true, models: data.data ?? [] } : { ok: false, models: [] }
-  }
+  const data = await requestJson<OpenAIModelsResponse>(url, headers)
+  return data ? { ok: true, models: data.data ?? [] } : { ok: false, models: [] }
 }
 
 export async function discoverModelInfoFromProvider(
@@ -123,26 +98,16 @@ export async function discoverModelInfoFromProvider(
     headers["Authorization"] = `Bearer ${apiKey}`
   }
 
-  try {
-    const data = await fetchJson<unknown>(url, headers)
-    return data !== undefined ? { ok: true, data } : { ok: false, data: undefined }
-  } catch {
-    const data = await fetchJsonViaHttpModule<unknown>(url, headers)
-    return data !== undefined ? { ok: true, data } : { ok: false, data: undefined }
-  }
+  const data = await requestJson<unknown>(url, headers)
+  return data !== undefined ? { ok: true, data } : { ok: false, data: undefined }
 }
 
 export async function fetchModelsDirect(baseURL: string, endpoint: string = OPENAI_COMPATIBLE_MODELS_ENDPOINT): Promise<string[]> {
   const url = buildAPIURL(baseURL, endpoint)
   const headers = { "Content-Type": "application/json" }
 
-  try {
-    const data = await fetchJson<OpenAIModelsResponse>(url, headers)
-    return data?.data?.map(model => model.id) || []
-  } catch {
-    const data = await fetchJsonViaHttpModule<OpenAIModelsResponse>(url, headers)
-    return data?.data?.map(model => model.id) || []
-  }
+  const data = await requestJson<OpenAIModelsResponse>(url, headers)
+  return data?.data?.map(model => model.id) || []
 }
 
 export async function autoDetectOpenAICompatibleProvider(): Promise<{ name: string; baseURL: string } | null> {
