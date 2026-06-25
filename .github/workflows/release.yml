@@ -12,6 +12,10 @@ on:
           - minor
           - major
         default: patch
+      source_branch:
+        description: 'Source branch to release from'
+        required: true
+        default: dev
 
 jobs:
   prepare-release:
@@ -26,6 +30,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ inputs.source_branch }}
       
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2.2.0
