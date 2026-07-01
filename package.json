@@ -4,14 +4,23 @@
   "version": "0.12.0",
   "description": "OpenCode plugin for auto-discovery of OpenAI-compatible models with dynamic provider configuration",
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./dist/cjs/index.cjs",
+  "types": "./dist/esm/index.d.ts",
+  "module": "./dist/esm/index.mjs",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "import": "./dist/esm/index.mjs",
+      "require": "./dist/cjs/index.cjs"
+    }
   },
   "files": [
-    "src"
+    "dist"
   ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
+    "build": "rslib build && npm run typecheck && npm run test:run",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
@@ -19,7 +28,6 @@
     "test:watch": "vitest watch",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
-    "build": "npm run typecheck && npm run test:run",
     "validate": "npm run lint && npm run typecheck && npm run test:run",
     "validate:config": "bun scripts/validate-config.ts",
     "release": "bun scripts/release.ts",
@@ -43,7 +51,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yuhp/opencode-models-discovery.git"
+    "url": "git+https://github.com/AI-Trash/opencode-models-discovery.git"
   },
   "dependencies": {
     "xdg-basedir": "^5.1.0"
@@ -53,6 +61,7 @@
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.17.10",
+    "@rslib/core": "^0.23.1",
     "@types/node": "^25.0.3",
     "@vitest/coverage-v8": "^4.0.16",
     "eslint": "^9.39.2",

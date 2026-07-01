@@ -1,18 +1,16 @@
 name: Publish
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
-    paths:
-      - package.json
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
       id-token: write
 
     steps:
@@ -31,7 +29,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@AI-Trash'
 
       - run: npm install -g npm@latest
 
@@ -47,4 +46,4 @@ jobs:
         run: bun scripts/release.ts publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

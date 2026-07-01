@@ -36,7 +36,7 @@ function getPackageInfo(): { name: string; repositorySlug: string } {
         .replace(/^git\+https:\/\/github\.com\//, '')
         .replace(/^https:\/\/github\.com\//, '')
         .replace(/\.git$/, '')
-    : 'yuhp/opencode-models-discovery'
+    : 'AI-Trash/opencode-models-discovery'
 
   return {
     name: pkg.name,
@@ -109,7 +109,9 @@ function remoteTagExists(tagName: string): boolean {
 
 function npmVersionExists(packageName: string, version: string): boolean {
   try {
-    return getCommandOutput(`npm view ${shellQuote(`${packageName}@${version}`)} version`) === version
+    const registry = 'https://npm.pkg.github.com'
+    const result = getCommandOutput(`npm view ${shellQuote(`${packageName}@${version}`)} version --registry ${registry}`)
+    return result === version
   } catch {
     return false
   }
@@ -205,9 +207,9 @@ ${changesSection}
 ### Installation
 
 \`\`\`bash
-npm install ${name}@${version}
-# or
-bun add ${name}@${version}
+echo "//npm.pkg.github.com/:_authToken=\${GH_TOKEN}" > ~/.npmrc
+echo "@AI-Trash:registry=https://npm.pkg.github.com" >> ~/.npmrc
+npm install @AI-Trash/${name}@${version}
 \`\`\``
 }
 
@@ -240,6 +242,7 @@ function prepareRelease(versionType: string): void {
 
 - Bump ${name} to v${newVersion}.
 - Merging this PR will trigger the publish workflow from protected main.
+- Published to GitHub Packages under @AI-Trash scope.
 
 ## Validation
 
@@ -284,27 +287,26 @@ function publishCurrentVersion(): void {
     console.warn('⚠️  GitHub release creation failed (may already exist)')
   }
 
-  console.log('\n📦 Publishing to npm...')
+  console.log('\n📦 Publishing to GitHub Packages...')
 
   if (npmVersionExists(name, newVersion)) {
-    console.log(`✓ ${name}@${newVersion} already exists on npm. Skipping npm publish.`)
+    console.log(`✓ ${name}@${newVersion} already exists on GitHub Packages. Skipping publish.`)
     console.log(`\n🎉 Release ${newVersion} completed successfully!`)
     console.log(`   - Git tag: ${tagName}`)
     console.log(`   - GitHub: https://github.com/${repositorySlug}/releases/tag/${tagName}`)
-    console.log(`   - npm: https://www.npmjs.com/package/${name}/v/${newVersion}`)
+    console.log(`   - Packages: https://github.com/${repositorySlug}/pkgs/npm/${name}`)
     return
   }
 
   try {
-    runCommand('npm publish', 'Publishing to npm')
-    console.log(`\n✅ Successfully published ${name}@${newVersion} to npm!`)
-    console.log(`   https://www.npmjs.com/package/${name}`)
+    runCommand('npm publish', 'Publishing to GitHub Packages')
+    console.log(`\n✅ Successfully published ${name}@${newVersion} to GitHub Packages!`)
+    console.log(`   https://github.com/${repositorySlug}/pkgs/npm/${name}`)
   } catch (error) {
     console.error('\n⚠️  npm publish failed. Common reasons:')
-    console.error('   1. Trusted Publishing is not configured for this repository')
-    console.error('   2. Package name already exists (version conflict)')
-    console.error('   3. The GitHub Actions workflow is missing id-token: write')
-    console.error('   4. The publish step is not running in GitHub Actions')
+    console.error('   1. GITHUB_TOKEN does not have packages:write permission')
+    console.error('   2. Package version already exists')
+    console.error('   3. The GitHub Actions workflow is missing packages: write permission')
     console.error('\n   Tag and GitHub release may already exist. After fixing npm permissions, rerun this workflow to retry npm publish.')
     throw error
   }
