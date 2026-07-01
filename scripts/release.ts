@@ -209,7 +209,7 @@ ${changesSection}
 \`\`\`bash
 echo "//npm.pkg.github.com/:_authToken=\${GH_TOKEN}" > ~/.npmrc
 echo "@AI-Trash:registry=https://npm.pkg.github.com" >> ~/.npmrc
-npm install @AI-Trash/${name}@${version}
+npm install ${name}@${version}
 \`\`\``
 }
 
